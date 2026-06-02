@@ -33,6 +33,7 @@ namespace DrovaInventorySearch
         private bool _mainInventoryDiagnosticsDone = false;
         private UnityEngine.UI.Button? _allCategoryButton = null;
         private readonly List<UnityEngine.UI.Button> _categoryButtons = new();
+        private readonly Dictionary<UnityEngine.UI.Button, UnityEngine.Events.UnityAction> _categoryButtonListeners = new();
         private bool _isChangingCategoryProgrammatically = false;
         private bool _localizationInitialized = false;
 
@@ -291,6 +292,12 @@ namespace DrovaInventorySearch
                 // clear EventSystem selection so game keyboard controls work again
                 _searchInput.onEndEdit.AddListener(new Action<string>(OnSearchEndEdit));
                 
+                // Force the input field to initialize its caret properly
+                // This ensures the caret is visible immediately when the user focuses
+                _searchInput.enabled = false;
+                _searchInput.enabled = true;
+                _searchInput.ForceLabelUpdate();
+                
                 UpdateSearchBarVisibility();
             }
             catch (Exception ex)
@@ -427,7 +434,9 @@ namespace DrovaInventorySearch
                     _currentSearchText = string.Empty;
                     if (_searchInput != null)
                     {
+                        // Clear the text field and deactivate it to ensure clean state
                         _searchInput.text = string.Empty;
+                        _searchInput.DeactivateInputField();
                     }
                     RestoreOriginalView();
                 }
@@ -876,7 +885,11 @@ namespace DrovaInventorySearch
                                 {
                                     _categoryButtons.Add(btn);
                                     bool isAllButton = btnName == "CategorySlots_All";
-                                    btn.onClick.AddListener(new Action(() => OnCategoryButtonClicked(isAllButton)));
+                                    
+                                    // Create a UnityAction delegate that we can track and remove later
+                                    UnityEngine.Events.UnityAction listener = new Action(() => OnCategoryButtonClicked(isAllButton));
+                                    _categoryButtonListeners[btn] = listener;
+                                    btn.onClick.AddListener(listener);
                                 }
                             }
                         }
@@ -907,6 +920,21 @@ namespace DrovaInventorySearch
             try
             {
                 RestoreOriginalView();
+                
+                // Remove only our listeners from category buttons, not the game's original listeners
+                foreach (var kvp in _categoryButtonListeners)
+                {
+                    var btn = kvp.Key;
+                    var listener = kvp.Value;
+                    if (btn != null && listener != null)
+                    {
+                        btn.onClick.RemoveListener(listener);
+                    }
+                }
+                _categoryButtonListeners.Clear();
+                _categoryButtons.Clear();
+                _allCategoryButton = null;
+                
                 if (_searchInputObject != null)
                 {
                     GameObject.Destroy(_searchInputObject);
@@ -917,6 +945,7 @@ namespace DrovaInventorySearch
                 _currentSearchText = string.Empty;
                 _isSearchActive = false;
                 _diagnosticsDone = false;
+                _mainInventoryDiagnosticsDone = false; // Reset so listeners are re-added on next load
             }
             catch (Exception ex) { MelonLogger.Error($"[Inventory Search] Cleanup error: {ex.Message}"); }
         }
