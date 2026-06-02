@@ -1,0 +1,21 @@
+# Build output
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider / JetBrains
+.idea/
+*.sln.iml
+
+# Local game DLL references (not committed - each user points to their own game install)
+libs/
+
+# OS
+.DS_Store
+Thumbs.db
