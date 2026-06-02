@@ -45,14 +45,15 @@ Mod for **Drova - Forsaken Kin** that adds a search bar to the inventory window 
 
 1. Make sure you have **MelonLoader** installed for Drova
 2. Install **Drova Modding API** mod (required dependency)
-3. Copy `DrovaInventorySearch.dll` to: `[Game Folder]/Mods/`
-4. Launch the game
+3. Download the latest release from the [Releases](../../releases) page
+4. Copy `DrovaInventorySearch.dll` to: `[Game Folder]/Mods/`
+5. Launch the game
 
 ## Requirements
 
-- Drova - Forsaken Kin
-- MelonLoader
-- Drova Modding API
+- Drova - Forsaken Kin (https://store.steampowered.com/app/1585180/Drova__Forsaken_Kin/)
+- MelonLoader (https://melonwiki.xyz/)
+- Drova Modding API (https://github.com/Drova-Modding/Drova-Modding-API/releases)
 
 ## Technical Details
 
