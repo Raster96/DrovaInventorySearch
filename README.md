@@ -1,8 +1,9 @@
 # Drova Inventory Search
 
 Mod for **Drova - Forsaken Kin** that adds a search bar to the inventory window for quick item filtering.
-<img width="544" height="795" alt="image" src="https://github.com/user-attachments/assets/afd4df01-9946-4384-b863-96dd1dd92620" />
+<img width="480" height="794" alt="image1" src="https://github.com/user-attachments/assets/d22bed5e-82e7-4d8a-a6c6-5d2178927629" />
 
+https://www.youtube.com/watch?v=ylcrGaKhWl8
 ## Features
 
 - **Search Bar**: Adds an input field at the bottom of the inventory window
