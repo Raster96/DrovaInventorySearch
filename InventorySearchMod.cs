@@ -15,8 +15,9 @@ using UnityEngine.UI;
 using Il2CppInterop.Runtime.InteropTypes;
 using Drova_Modding_API.Access;
 using Il2CppCustomFramework.Localization;
+using HarmonyLib;
 
-[assembly: MelonInfo(typeof(DrovaInventorySearch.InventorySearchMod), "Drova Inventory Search", "1.0.0", "Raster96")]
+[assembly: MelonInfo(typeof(DrovaInventorySearch.InventorySearchMod), "Drova Inventory Search", "1.0.1", "Raster96")]
 [assembly: MelonGame("Just2D", "Drova")]
 [assembly: MelonAdditionalDependencies("Drova_Modding_API")]
 
@@ -36,11 +37,52 @@ namespace DrovaInventorySearch
         private readonly Dictionary<UnityEngine.UI.Button, UnityEngine.Events.UnityAction> _categoryButtonListeners = new();
         private bool _isChangingCategoryProgrammatically = false;
         private bool _localizationInitialized = false;
+        
+        // Input field texture - store as Texture2D to prevent garbage collection
+        private Texture2D? _customInputFieldTexture;
+        private Texture2D? _searchIconTexture;
 
         public override void OnInitializeMelon()
         {
-            MelonLogger.Msg("=== Drova Inventory Search v1.1 ===");
+            MelonLogger.Msg("=== Drova Inventory Search v1.0.1 ===");
             // Localization will be initialized later when LocalizationDB is available
+            LoadCustomInputFieldTexture();
+            LoadSearchIconTexture();
+        }
+
+        private void LoadSearchIconTexture()
+        {
+            try
+            {
+                var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+                var resourceName = "DrovaInventorySearch.Textures.GUI_CharacterCreation_Icon_Zoom_Highlighted.png";
+                
+                using (var stream = assembly.GetManifestResourceStream(resourceName))
+                {
+                    if (stream == null)
+                    {
+                        MelonLogger.Warning($"[Inventory Search] Search icon not found, skipping");
+                        return;
+                    }
+
+                    byte[] imageData = new byte[stream.Length];
+                    stream.Read(imageData, 0, imageData.Length);
+
+                    _searchIconTexture = new Texture2D(2, 2);
+                    _searchIconTexture.hideFlags = HideFlags.DontUnloadUnusedAsset;
+                    
+                    bool loaded = ImageConversion.LoadImage(_searchIconTexture, imageData);
+                    
+                    if (!loaded)
+                    {
+                        _searchIconTexture = null;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Error($"[Inventory Search] Failed to load search icon: {ex.Message}");
+            }
         }
 
         private void InitializeLocalization()
@@ -79,46 +121,83 @@ namespace DrovaInventorySearch
             }
         }
 
+        private void LoadCustomInputFieldTexture()
+        {
+            try
+            {
+                // Load embedded PNG resource
+                var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+                var resourceName = "DrovaInventorySearch.Textures.GUI_Playermenu_Equipment_Button_Category_Frame.png";
+                
+                using (var stream = assembly.GetManifestResourceStream(resourceName))
+                {
+                    if (stream == null)
+                    {
+                        MelonLogger.Error($"[Inventory Search] Failed to find embedded resource: {resourceName}");
+                        return;
+                    }
+
+                    // Read PNG data
+                    byte[] imageData = new byte[stream.Length];
+                    stream.Read(imageData, 0, imageData.Length);
+
+                    // Create Texture2D and keep it persistent
+                    _customInputFieldTexture = new Texture2D(2, 2);
+                    _customInputFieldTexture.hideFlags = HideFlags.DontUnloadUnusedAsset;
+                    
+                    bool loaded = ImageConversion.LoadImage(_customInputFieldTexture, imageData);
+
+                    if (!loaded)
+                    {
+                        MelonLogger.Error("[Inventory Search] Failed to load image data into texture");
+                        _customInputFieldTexture = null;
+                        return;
+                    }
+
+                    MelonLogger.Msg($"[Inventory Search] Textures loaded successfully");
+                }
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Error($"[Inventory Search] Failed to load custom input field texture: {ex.Message}");
+            }
+        }
+
         public override void OnUpdate()
         {
             try
             {
-                if (_currentInventoryWindow == null)
+                // Ctrl+F activates the search bar
+                if (_searchInput != null && _searchInput.gameObject.activeInHierarchy)
                 {
-                    GameObject inventoryObj = GameObject.Find("SceneRoot/GUI_PlayerGameMenu(Clone)")
-                                          ?? GameObject.Find("GUI_PlayerGameMenu(Clone)");
-
-                    if (inventoryObj != null && inventoryObj.activeInHierarchy)
+                    if (Input.GetKey(KeyCode.LeftControl) && Input.GetKeyDown(KeyCode.F))
                     {
-                        var window = inventoryObj.GetComponent<GUI_Window>();
-                        if (window != null)
-                        {
-                            _currentInventoryWindow = window;
-                            CreateSearchBar();
-                        }
+                        _searchInput.ActivateInputField();
+                        _searchInput.Select();
                     }
                 }
-                else if (!_currentInventoryWindow.gameObject.activeInHierarchy)
+                
+                // Check for window close
+                if (_currentInventoryWindow != null && !_currentInventoryWindow.gameObject.activeInHierarchy)
                 {
                     CleanupSearch();
                 }
-                else
+                else if (_currentInventoryWindow != null)
                 {
-                    // Check if GUI_MainInventory panel is active
                     UpdateSearchBarVisibility();
-                    
-                    // Ctrl+F activates the search bar
-                    if (Input.GetKey(KeyCode.LeftControl) && Input.GetKeyDown(KeyCode.F))
-                    {
-                        if (_searchInput != null && _searchInput.gameObject.activeInHierarchy)
-                        {
-                            _searchInput.ActivateInputField();
-                            _searchInput.Select();
-                        }
-                    }
                 }
             }
             catch { }
+        }
+
+        // Called by Harmony patch when inventory opens
+        public void OnInventoryOpened(GUI_Window window)
+        {
+            _currentInventoryWindow = window;
+            if (_searchInputObject == null)
+            {
+                CreateSearchBar();
+            }
         }
 
         private void CreateSearchBar()
@@ -139,14 +218,14 @@ namespace DrovaInventorySearch
                 Transform currencyShardsTransform = inventoryTransform?.Find("CurrencyShards");
                 
                 Transform parentTransform = inventoryTransform;
-                Vector2 searchPosition = new Vector2(-200, -15);
+                Vector2 searchPosition = new Vector2(-200, -17); // Moved down by 1 pixel
                 
                 if (currencyShardsTransform != null)
                 {
                     RectTransform currencyRect = currencyShardsTransform.GetComponent<RectTransform>();
                     if (currencyRect != null)
                     {
-                        searchPosition = new Vector2(-75, 7);
+                        searchPosition = new Vector2(-75, 5); // Moved down by 1 pixel
                     }
                 }
 
@@ -158,51 +237,103 @@ namespace DrovaInventorySearch
                 searchRect.anchorMax = new Vector2(1f, 0f);
                 searchRect.pivot = new Vector2(1f, 0f);
                 searchRect.anchoredPosition = searchPosition;
-                searchRect.sizeDelta = new Vector2(70, 10); // Same size as gold counter
+                
+                // Use texture size if available, otherwise fallback to default
+                if (_customInputFieldTexture != null)
+                {
+                    // Scale down the texture proportionally to fit roughly the same visual size
+                    float scale = 0.5f; // Scale down to 50% of original size
+                    searchRect.sizeDelta = new Vector2(
+                        _customInputFieldTexture.width * scale,
+                        _customInputFieldTexture.height * scale + 2 // +2px height (1px up, 1px down)
+                    );
+                }
+                else
+                {
+                    searchRect.sizeDelta = new Vector2(70, 12); // Fallback size (+2px height)
+                }
 
-                // NO Image component - fully transparent background
-                // Create border using 4 separate Image lines
-                CreateBorderLine(_searchInputObject.transform, "BorderTop", 
-                    new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, 0), 
-                    new Vector2(70, 1)); // Top border
-                CreateBorderLine(_searchInputObject.transform, "BorderBottom", 
-                    new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0, 0), 
-                    new Vector2(70, 1)); // Bottom border
-                CreateBorderLine(_searchInputObject.transform, "BorderLeft", 
-                    new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0, 0), 
-                    new Vector2(1, 10)); // Left border
-                CreateBorderLine(_searchInputObject.transform, "BorderRight", 
-                    new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0, 0), 
-                    new Vector2(1, 10)); // Right border
+                // Add Image component with background texture
+                Image bgImage = _searchInputObject.AddComponent<Image>();
+                if (_customInputFieldTexture != null)
+                {
+                    // Create sprite from texture on demand
+                    Sprite customSprite = Sprite.Create(
+                        _customInputFieldTexture,
+                        new Rect(0, 0, _customInputFieldTexture.width, _customInputFieldTexture.height),
+                        new Vector2(0.5f, 0.5f),
+                        100f
+                    );
+                    customSprite.hideFlags = HideFlags.DontUnloadUnusedAsset;
+                    
+                    bgImage.sprite = customSprite;
+                    bgImage.type = Image.Type.Simple;
+                    bgImage.preserveAspect = false;
+                    // White color to show the texture as-is (texture already has transparency)
+                    bgImage.color = Color.white;
+                }
+                else
+                {
+                    // Fallback: transparent background
+                    bgImage.color = new Color(0f, 0f, 0f, 0f);
+                }
+                bgImage.raycastTarget = true;
 
                 // Add TMP_InputField
                 _searchInput = _searchInputObject.AddComponent<TMP_InputField>();
-                
-                // Get or add Image component for InputField (but make it transparent)
-                Image bgImage = _searchInputObject.GetComponent<Image>();
-                if (bgImage == null)
+                _searchInput.targetGraphic = bgImage;
+
+                // === SEARCH ICON (left side) ===
+                if (_searchIconTexture != null)
                 {
-                    bgImage = _searchInputObject.AddComponent<Image>();
+                    GameObject iconObj = new GameObject("SearchIcon");
+                    iconObj.transform.SetParent(_searchInputObject.transform, false);
+                    
+                    RectTransform iconRect = iconObj.AddComponent<RectTransform>();
+                    iconRect.anchorMin = new Vector2(0f, 0.5f);
+                    iconRect.anchorMax = new Vector2(0f, 0.5f);
+                    iconRect.pivot = new Vector2(0f, 0.5f);
+                    iconRect.anchoredPosition = new Vector2(8, 0); // 8 pixels from left edge (moved right)
+                    
+                    // Icon size proportional to input height
+                    float iconSize = searchRect.sizeDelta.y * 0.5f; // 50% of input height (smaller)
+                    iconRect.sizeDelta = new Vector2(iconSize, iconSize);
+                    
+                    Image iconImage = iconObj.AddComponent<Image>();
+                    Sprite iconSprite = Sprite.Create(
+                        _searchIconTexture,
+                        new Rect(0, 0, _searchIconTexture.width, _searchIconTexture.height),
+                        new Vector2(0.5f, 0.5f),
+                        100f
+                    );
+                    iconSprite.hideFlags = HideFlags.DontUnloadUnusedAsset;
+                    
+                    iconImage.sprite = iconSprite;
+                    iconImage.color = new Color(0.800f, 0.753f, 0.639f, 0.8f); // Match text color with slight transparency
+                    iconImage.raycastTarget = false;
                 }
-                bgImage.color = new Color(0f, 0f, 0f, 0f); // Fully transparent
-                bgImage.raycastTarget = true;
 
                 GameObject textArea = new GameObject("TextArea");
                 textArea.transform.SetParent(_searchInputObject.transform, false);
                 RectTransform textAreaRect = textArea.AddComponent<RectTransform>();
                 textAreaRect.anchorMin = Vector2.zero;
                 textAreaRect.anchorMax = Vector2.one;
-                textAreaRect.offsetMin = new Vector2(5, 2);
-                textAreaRect.offsetMax = new Vector2(-5, -2);
+                // Left padding for icon + 2px spacing, right padding to prevent overflow
+                float leftPadding = _searchIconTexture != null ? 17 : 5; // Space for icon + 2px
+                textAreaRect.offsetMin = new Vector2(leftPadding, 2);
+                textAreaRect.offsetMax = new Vector2(-6, -2); // -6 to keep 1px more distance from right edge
+                
+                // Add RectMask2D to clip overflow text properly
+                textArea.AddComponent<UnityEngine.UI.RectMask2D>();
 
-                // === PLACEHOLDER ===
+                // === PLACEHOLDER (separate, centered) ===
                 GameObject placeholderObj = new GameObject("Placeholder");
-                placeholderObj.transform.SetParent(textArea.transform, false);
+                placeholderObj.transform.SetParent(_searchInputObject.transform, false); // Parent to main object, not textArea
                 RectTransform placeholderRect = placeholderObj.AddComponent<RectTransform>();
                 placeholderRect.anchorMin = Vector2.zero;
                 placeholderRect.anchorMax = Vector2.one;
-                placeholderRect.offsetMin = Vector2.zero;
-                placeholderRect.offsetMax = Vector2.zero;
+                placeholderRect.offsetMin = new Vector2(5, 2); // No left padding - centered in full width
+                placeholderRect.offsetMax = new Vector2(-5, -2);
                 TextMeshProUGUI placeholderText = placeholderObj.AddComponent<TextMeshProUGUI>();
                 
                 // Get current language and use appropriate placeholder text
@@ -250,7 +381,7 @@ namespace DrovaInventorySearch
                 inputText.text = "";
                 inputText.fontSize = 7; // Smaller font for smaller box
                 inputText.color = new Color(0.800f, 0.753f, 0.639f, 1.000f);
-                inputText.alignment = TextAlignmentOptions.Center;
+                inputText.alignment = TextAlignmentOptions.Left; // Left-align user input text
                 
                 // Find Philosopher font
                 try
@@ -280,6 +411,11 @@ namespace DrovaInventorySearch
                 _searchInput.shouldActivateOnSelect = true;
                 _searchInput.restoreOriginalTextOnEscape = true;
                 
+                // Enable text overflow clipping
+                inputText.overflowMode = TextOverflowModes.Masking; // Use masking to properly clip text
+                inputText.enableWordWrapping = false;
+                inputText.horizontalMapping = TextureMappingOptions.Character; // Character-based mapping for proper scrolling
+                
                 // Caret settings
                 _searchInput.caretWidth = 1;
                 _searchInput.customCaretColor = false;
@@ -304,24 +440,6 @@ namespace DrovaInventorySearch
             {
                 MelonLogger.Error($"[Inventory Search] CreateSearchBar error: {ex.Message}");
             }
-        }
-
-        private void CreateBorderLine(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, 
-            Vector2 anchoredPosition, Vector2 sizeDelta)
-        {
-            GameObject borderLine = new GameObject(name);
-            borderLine.transform.SetParent(parent, false);
-            
-            RectTransform rectTransform = borderLine.AddComponent<RectTransform>();
-            rectTransform.anchorMin = anchorMin;
-            rectTransform.anchorMax = anchorMax;
-            rectTransform.pivot = new Vector2(0.5f, 0.5f);
-            rectTransform.anchoredPosition = anchoredPosition;
-            rectTransform.sizeDelta = sizeDelta;
-            
-            Image lineImage = borderLine.AddComponent<Image>();
-            lineImage.color = new Color(0.55f, 0.4f, 0.25f, 1f); // Brown color
-            lineImage.raycastTarget = false;
         }
 
         private void UpdateSearchBarVisibility()
@@ -953,6 +1071,25 @@ namespace DrovaInventorySearch
         public override void OnDeinitializeMelon()
         {
             CleanupSearch();
+        }
+    }
+
+    // Harmony patch to detect inventory window opening instantly
+    [HarmonyPatch(typeof(GUI_Window), "ShowWindow")]
+    internal static class InventoryWindowPatch
+    {
+        private static void Postfix(GUI_Window __instance)
+        {
+            // Check if this is the player inventory window
+            if (__instance.name.Contains("GUI_PlayerGameMenu"))
+            {
+                // Find the mod instance and trigger search bar creation
+                var mod = MelonBase.FindMelon("Drova Inventory Search", "Raster96") as InventorySearchMod;
+                if (mod != null)
+                {
+                    mod.OnInventoryOpened(__instance);
+                }
+            }
         }
     }
 }

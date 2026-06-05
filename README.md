@@ -64,8 +64,23 @@ Mod for **Drova - Forsaken Kin** that adds a search bar to the inventory window 
 
 ## Version
 
-**1.0.0** - Initial release
+**Current: 1.0.1**
 
-## Author
+### Changelog
 
-Created for the Drova modding community
+#### v1.0.1
+- **Improved**: Enhanced input field appearance with in-game textures and search icon
+- **Improved**: Changed initialization method - search bar now appears significantly faster
+- **Fixed**: Text overflow issue where long search queries would extend beyond the input field
+
+#### v1.0.0
+- Initial release
+- Basic search functionality
+- Multi-language support
+- Keyboard shortcuts (Ctrl+F, Esc)
+
+## Credits & Legal
+
+**Textures**: The textures in the `Textures/` folder are extracted from *Drova - Forsaken Kin*. All rights to these assets belong to **Just2D GmbH**. They are used here solely for the purpose of maintaining visual consistency with the game's UI.
+
+**Mod Author**: Created for the Drova modding community
